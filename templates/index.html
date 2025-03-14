@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Missing Persons Registry</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link type="text/css" rel="stylesheet" href="{{ url_for('static', filename='css/pixcel.css') }}">
+</head>
+<style>    
+    .video-container {
+        position: relative;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .video-stream {
+        width: 100%;
+        height: auto;
+        border-radius: 8px;
+    }
+
+    .detection-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: 5px solid transparent;
+        box-sizing: border-box;
+        pointer-events: none;
+        border-radius: 8px;
+        transition: border-color 0.3s ease;
+    }
+
+    .detection-overlay.detected {
+        border-color: #00ff00;
+    }
+
+    .status-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+    }
+
+    .reference-image-container {
+        width: 200px;
+        height: 200px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+        margin: 0 auto 20px;
+        background-color: #f8f9fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .reference-image {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .upload-section {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .processing-section {
+        margin-top: 30px;
+    }
+
+    .video-title {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        max-width: 80%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+</style>
+<body>
+    <div class="layout-container">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <a href="{{ url_for('home') }}" class="sidebar-brand">
+                    <i class="fas fa-search-location"></i> FindThem
+                </a>
+            </div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'home' %}active{% endif %}" href="{{ url_for('home') }}">
+                        <i class="fas fa-home"></i> Home
+                    </a>
+                </li>
+                {% if current_user.is_authenticated %}
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'dashboard' %}active{% endif %}"
+                        href="{{ url_for('dashboard') }}">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'my_reports' %}active{% endif %}"
+                        href="{{ url_for('my_reports') }}">
+                        <i class="fas fa-clipboard-list"></i> My Reports
+                    </a>
+                </li>
+                {% else %}
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'login' %}active{% endif %}" href="{{ url_for('login') }}">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'register' %}active{% endif %}"
+                        href="{{ url_for('register') }}">
+                        <i class="fas fa-user-plus"></i> Register
+                    </a>
+                </li>
+                {% endif %}
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'register_missing' %}active{% endif %}"
+                        href="{{ url_for('register_missing') }}">
+                        <i class="fas fa-user-check"></i> Register Missing
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'find_missing' %}active{% endif %}"
+                        href="{{ url_for('find_missing') }}">
+                        <i class="fas fa-search-location"></i> Find Missing
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'cctv_realtime' %}active{% endif %}"
+                        href="{{ url_for('cctv_realtime') }}">
+                        <i class="fas fa-video"></i> CCTV Realtime
+                    </a>
+                </li>
+
+                {% if current_user.is_authenticated %}
+                <!-- New Realtime Detection nav item -->
+                <li class="nav-item">
+                    <a class="nav-link {% if section == 'realtime' %}active{% endif %}"
+                        href="{{ url_for('realtime') }}">
+                        <i class="fas fa-video"></i> Realtime Detection
+                    </a>
+                </li>
+                <li class="nav-item mt-3">
+                    <a class="nav-link" href="{{ url_for('logout') }}">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Navbar -->
+            <nav class="top-navbar">
+                <button type="button" id="sidebarCollapse" class="navbar-toggler">
+                    <i class="fas fa-bars"></i>
+                </button>
+                {% if current_user.is_authenticated %}
+                <div class="user-dropdown">
+                    <img src="/api/placeholder/40/40" alt="User Avatar">
+                    <span>{{ current_user.username }}</span>
+                </div>
+                {% else %}
+                <div>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-sm me-2">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </a>
+                    <a href="{{ url_for('register') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-user-plus"></i> Register
+                    </a>
+                </div>
+                {% endif %}
+            </nav>
+
+            <div class="content-wrapper">
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <i class="fas fa-info-circle me-2"></i> {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                <!-- Conditional Content Sections -->
+                <div class="content-section">
+                    {% if section == 'home' %}
+                    <div class="intro-section">
+                        <h1><i class="fas fa-search-location"></i> Missing Persons Registry</h1>
+                        <p class="lead">Help find missing persons through advanced facial recognition technology.</p>
+                        {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-light btn-lg">
+                            <i class="fas fa-tachometer-alt me-2"></i> Go to Dashboard
+                        </a>
+                        {% else %}
+                        <a href="{{ url_for('login') }}" class="btn btn-light btn-lg me-2">
+                            <i class="fas fa-sign-in-alt me-2"></i> Login
+                        </a>
+                        <a href="{{ url_for('register') }}" class="btn btn-outline-light btn-lg">
+                            <i class="fas fa-user-plus me-2"></i> Register
+                        </a>
+                        {% endif %}
+                    </div>
+
+                    <div class="row mt-5">
+                        <h2 class="text-center mb-4">How It Works</h2>
+                        <div class="col-md-4">
+                            <div class="feature-box">
+                                <i class="fas fa-user-plus"></i>
+                                <h4>Register</h4>
+                                <p>Create an account to report a missing person with details and photos.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-box">
+                                <i class="fas fa-camera"></i>
+                                <h4>Upload</h4>
+                                <p>Upload images or videos to search for potential matches in our database.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feature-box">
+                                <i class="fas fa-brain"></i>
+                                <h4>AI Recognition</h4>
+                                <p>Our advanced AI system scans and identifies potential matches instantly.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-5">
+                        <h2 class="text-center mb-4">Recent Success Stories</h2>
+                        <div class="row">
+                            <div class="col-md-4 mb-4">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-heart text-danger mb-3" style="font-size: 2rem;"></i>
+                                        <h5>Family Reunited</h5>
+                                        <p class="card-text">A missing teenager was located after 3 months thanks to a
+                                            match in our system.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-4">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-child text-primary mb-3" style="font-size: 2rem;"></i>
+                                        <h5>Child Found</h5>
+                                        <p class="card-text">A lost 6-year-old was identified within hours of uploading
+                                            to our database.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-4">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-users text-success mb-3" style="font-size: 2rem;"></i>
+                                        <h5>Community Effort</h5>
+                                        <p class="card-text">Dozens of volunteers used our app to help locate a missing
+                                            elderly person.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% elif section == 'register' %}
+                    <div class="card">
+                        <div class="card-header">
+                            <h4><i class="fas fa-user-plus me-2"></i>User Registration</h4>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('register') }}">
+                                <div class="mb-3">
+                                    <label for="username" class="form-label">Username</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-user"></i></span>
+                                        <input type="text" class="form-control" id="username" name="username" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email Address</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                        <input type="email" class="form-control" id="email" name="email" required>
+                                    </div>
+                                </div>
+                                <!-- New Phone Number field -->
+                                <div class="mb-3">
+                                    <label for="phone_number" class="form-label">Phone Number</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                        <input type="text" class="form-control" id="phone_number" name="phone_number" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">Password</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                        <input type="password" class="form-control" id="password" name="password" required>
+                                    </div>
+                                    <div class="form-text">Password must be at least 8 characters long.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="confirm_password" class="form-label">Confirm Password</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="terms" required>
+                                    <label class="form-check-label" for="terms">I agree to the Terms of Service and Privacy Policy</label>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-user-plus me-2"></i>Register
+                                </button>
+                            </form>
+                            <div class="mt-3">
+                                <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+
+                    {% elif section == 'login' %}
+                    <div class="row">
+                        <div class="col-md-6 mx-auto">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h4><i class="fas fa-sign-in-alt me-2"></i>Login</h4>
+                                </div>
+                                <div class="card-body">
+                                    <form method="POST" action="{{ url_for('login') }}">
+                                        <div class="mb-3">
+                                            <label for="username" class="form-label">Username</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="fas fa-user"></i></span>
+                                                <input type="text" class="form-control" id="username" name="username"
+                                                    required>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="password" class="form-label">Password</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                                <input type="password" class="form-control" id="password"
+                                                    name="password" required>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3 form-check">
+                                            <input type="checkbox" class="form-check-input" id="remember">
+                                            <label class="form-check-label" for="remember">Remember me</label>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="fas fa-sign-in-alt me-2"></i>Login
+                                        </button>
+                                    </form>
+                                    <div class="mt-3">
+                                        <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a>
+                                        </p>
+                                        <p><a href="#">Forgot password?</a></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% elif section == 'dashboard' %}
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h2 class="card-title"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h2>
+                            <p class="lead">Welcome, {{ current_user.username }}!</p>
+                            <p>Thank you for being part of our community. Together, we can help locate missing
+                                individuals.</p>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-4">
+                            <div class="card action-card h-100">
+                                <i class="fas fa-user-check"></i>
+                                <h4>Register a Missing Person</h4>
+                                <p>Add details and a photo for facial recognition.</p>
+                                <a href="{{ url_for('register_missing') }}" class="btn btn-primary mt-3">
+                                    <i class="fas fa-plus me-1"></i> Register Missing
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="card action-card h-100">
+                                <i class="fas fa-search"></i>
+                                <h4>Find a Missing Person</h4>
+                                <p>Upload a photo or video to search for potential matches.</p>
+                                <a href="{{ url_for('find_missing') }}" class="btn btn-success mt-3">
+                                    <i class="fas fa-search me-1"></i> Find Missing
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="card action-card h-100">
+                                <i class="fas fa-clipboard-list"></i>
+                                <h4>My Reports</h4>
+                                <p>View and manage all your missing person reports.</p>
+                                <a href="{{ url_for('my_reports') }}" class="btn btn-info mt-3">
+                                    <i class="fas fa-clipboard-list me-1"></i> View Reports
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% elif section == 'register_missing' %}
+                    <div class="card">
+                        <div class="card-header">
+                            <h4>Register a Missing Person</h4>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('register_missing') }}"
+                                enctype="multipart/form-data">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="name" class="form-label">Full Name</label>
+                                        <input type="text" class="form-control" id="name" name="name" required>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label for="age" class="form-label">Age</label>
+                                        <input type="number" class="form-control" id="age" name="age" min="0" max="120">
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label for="gender" class="form-label">Gender</label>
+                                        <select class="form-select" id="gender" name="gender">
+                                            <option value="">Select...</option>
+                                            <option value="Male">Male</option>
+                                            <option value="Female">Female</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="last_seen_date" class="form-label">Last Seen Date</label>
+                                        <input type="date" class="form-control" id="last_seen_date"
+                                            name="last_seen_date" required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="last_seen_location" class="form-label">Last Seen Location</label>
+                                        <input type="text" class="form-control" id="last_seen_location"
+                                            name="last_seen_location" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="description" class="form-label">Description</label>
+                                    <textarea class="form-control" id="description" name="description"
+                                        rows="3"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="photo" class="form-label">Photo (Clear face photo required)</label>
+                                    <input type="file" class="form-control" id="photo" name="photo" accept="image/*"
+                                        required>
+                                    <small class="form-text text-muted">Upload a clear, front-facing photo.</small>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Register Missing Person</button>
+                            </form>
+                        </div>
+                    </div>
+
+
+                    {% elif section == 'cctv_realtime' %}
+                    <div class="card">
+                        <div class="card-header">
+                          <h4>CCTV Realtime Detection</h4>
+                        </div>
+                        <div class="card-body" style="display: flex; flex-wrap: wrap;">
+                          
+                          <!-- Left side: Detection Results -->
+                          <div style="flex: 1 1 60%; min-width: 300px; margin-right: 20px;">
+                            <h3 class="mb-3">Detection Results</h3>
+                            <!-- The video streams container where detection frames appear -->
+                            <div class="row" id="video-streams-container"></div>
+                          </div>
+                          
+                          <!-- Right side: Forms (Reference Image, Video Upload, Start Detection) -->
+                          <div style="flex: 0 0 320px; border-left: 1px solid #ccc; padding-left: 20px;">
+                            
+                            <!-- 1. Upload Reference Image -->
+                            <div class="upload-section mb-4">
+                              <h5 class="mb-2">1. Upload Reference Image</h5>
+                              <p style="font-size: 0.9rem;">Upload a clear photo of the person to find:</p>
+                              
+                              <div class="reference-image-container mb-3" id="reference-image-preview"
+                                   style="width: 200px; height: 200px; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                                <span id="reference-placeholder">No image selected</span>
+                                <img id="reference-image" class="reference-image d-none" src="" alt="Reference image"
+                                     style="width: 100%; height: 100%; object-fit: cover;">
+                              </div>
+                              
+                              <form id="reference-form">
+                                <div class="mb-3">
+                                  <input type="file" class="form-control" id="reference-image-input" accept="image/*" required>
+                                </div>
+                                <div class="mb-3">
+                                  <input type="text" class="form-control" id="reference-name-input" placeholder="Person's name/ID" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">Process Reference Image</button>
+                              </form>
+                              
+                              <div class="alert alert-success mt-3 d-none" id="reference-success">
+                                Reference image processed successfully!
+                              </div>
+                              <div class="alert alert-danger mt-3 d-none" id="reference-error"></div>
+                            </div>
+                            
+                            <!-- 2. Upload Video -->
+                            <div class="upload-section mb-4">
+                              <h5 class="mb-2">2. Upload Video</h5>
+                              <p style="font-size: 0.9rem;">Upload a video file to analyze:</p>
+                              
+                              <form id="videos-form">
+                                <div class="mb-3">
+                                  <input type="file" class="form-control" id="videos-input" accept="video/*" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">Upload Video</button>
+                              </form>
+                              
+                              <div class="alert alert-success mt-3 d-none" id="videos-success"></div>
+                              <div class="alert alert-danger mt-3 d-none" id="videos-error"></div>
+                              
+                              <div class="mt-3" id="uploaded-videos-list"></div>
+                            </div>
+                            
+                            <!-- 3. Start Detection -->
+                            <div class="upload-section">
+                              <h5 class="mb-2">3. Start Detection</h5>
+                              <p style="font-size: 0.9rem;">Process all uploaded videos to find the person:</p>
+                              
+                              <button id="start-processing-btn" class="btn btn-success w-100" disabled>
+                                Start Processing
+                              </button>
+                              
+                              <div class="alert alert-success mt-3 d-none" id="processing-success"></div>
+                              <div class="alert alert-danger mt-3 d-none" id="processing-error"></div>
+                            </div>
+                            
+                          </div><!-- end right panel -->
+                          
+                        </div><!-- end card-body -->
+                      </div><!-- end card -->
+                      
+
+                    {% elif section == 'find_missing' %}
+                    <div class="card">
+                        <div class="card-header">
+                            <h4>Find a Missing Person</h4>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('find_missing') }}" enctype="multipart/form-data">
+                                <div class="mb-3">
+                                    <label class="form-label">File Type</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="file_type" id="image_type"
+                                            value="image" checked>
+                                        <label class="form-check-label" for="image_type">Image (.jpg, .jpeg,
+                                            .png)</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="file_type" id="video_type"
+                                            value="video">
+                                        <label class="form-check-label" for="video_type">Video (.mp4)</label>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="file" class="form-label">Upload Image/Video</label>
+                                    <input type="file" class="form-control" id="file" name="file" required>
+                                    <small class="form-text text-muted">Upload a file where faces are clearly
+                                        visible.</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="threshold" class="form-label">Match Threshold (0.2-0.6, lower is
+                                        stricter)</label>
+                                    <input type="range" class="form-range" id="threshold" name="threshold" min="0.2"
+                                        max="0.6" step="0.01" value="0.39">
+                                    <div class="d-flex justify-content-between">
+                                        <small>Stricter (fewer false positives)</small>
+                                        <small>More lenient (higher recall)</small>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-search me-2"></i>Search for Matches
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% if results %}
+                    <h3 class="mt-4">Search Results</h3>
+                    {% if is_video %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Video analysis complete. Displaying frames where missing persons were detected.
+                    </div>
+
+                    <!-- Group results by person -->
+                    {% set grouped_detections = {} %}
+                    {% for detection in frame_detections %}
+                    {% if detection.missing_person_id not in grouped_detections %}
+                    {% set _ = grouped_detections.update({detection.missing_person_id: []}) %}
+                    {% endif %}
+                    {% set _ = grouped_detections[detection.missing_person_id].append(detection) %}
+                    {% endfor %}
+
+                    {% for person_id, detections in grouped_detections.items() %}
+                    {% set person = detections[0].missing_person %}
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-user me-2"></i>{{ person.name }}
+                            </h5>
+                            <span class="badge bg-success">Confidence: {{ "%.1f"|format(detections[0].confidence * 100)
+                                }}%</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Reference Photo</h6>
+                                        </div>
+                                        <img src="{{ url_for('static', filename='uploads/' + person.photo_path) }}"
+                                            alt="{{ person.name }}" class="card-img-top">
+                                    </div>
+                                </div>
+                                <div class="col-md-9">
+                                    <h6>Detected in Video Frames:</h6>
+                                    <div class="row">
+                                        {% for detection in detections[:6] %}
+                                        <div class="col-md-4 mb-3">
+                                            <div class="card">
+                                                <img src="{{ url_for('static', filename='matches/' + detection.frame_path) }}"
+                                                    class="card-img-top" alt="Detection Frame">
+                                                <div class="card-footer text-center small">
+                                                    Frame: {{ detection.frame_number }} | Confidence: {{
+                                                    "%.1f"|format(detection.confidence * 100) }}%
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+
+                                        {% if detections|length > 6 %}
+                                        <div class="col-12 text-center">
+                                            <button class="btn btn-sm btn-outline-primary show-more-frames"
+                                                data-person-id="{{ person.id }}">
+                                                Show {{ detections|length - 6 }} more frames
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <a href="{{ url_for('view_missing', id=person.id) }}" class="btn btn-info">
+                                    <i class="fas fa-info-circle me-2"></i>View Person Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    {% else %}
+                    {% for result in results %}
+                    <div class="card mb-3">
+                        <div class="row g-0">
+                            <div class="col-md-3">
+                                <img src="{{ url_for('static', filename='uploads/' + result.person.photo_path) }}"
+                                    alt="{{ result.person.name }}" class="img-fluid rounded-start">
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ result.person.name }}</h5>
+                                    <p class="card-text">Match Confidence: {{ result.confidence }}%</p>
+                                    <p class="card-text">
+                                        <small class="text-muted">Age: {{ result.person.age }} | Gender: {{
+                                            result.person.gender }}</small>
+                                    </p>
+                                    <a href="{{ url_for('view_missing', id=result.person.id) }}" class="btn btn-info">
+                                        <i class="fas fa-info-circle me-2"></i>View Details
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                {% if result.annotated_image %}
+                                <img src="{{ url_for('static', filename='matches/' + result.annotated_image) }}"
+                                    class="img-fluid border" alt="Detection">
+                                <p class="text-center mt-2 small">Detection</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                    {% endif %}
+
+                    {% elif section == 'realtime' %}
+                    <div class="card">
+                        <div class="card-header">
+                            <h4>Realtime Detection</h4>
+                        </div>
+                        <div class="card-body text-center">
+                            <!-- Embedded realtime video feed -->
+                            <img src="{{ url_for('video_feed') }}" class="img-fluid" alt="Realtime Video Feed">
+                        </div>
+                    </div>
+
+                    {% elif section == 'my_reports' %}
+                    <h2>My Missing Person Reports</h2>
+
+                    {% if not reports %}
+                        <div class="alert alert-info">You haven't reported any missing persons yet.</div>
+                        <a href="{{ url_for('register_missing') }}" class="btn btn-primary">Register a Missing Person</a>
+                    {% else %}
+                        <!-- 1) Make the row a flex container -->
+                        <div class="row" style="display: flex; flex-wrap: wrap; align-items: stretch;">
+                            
+                            {% for person in reports %}
+                            <!-- 2) Make each column also a flex container so the card can stretch -->
+                            <div class="col-md-4 mb-4 d-flex" style="display:flex;">
+                                
+                                <!-- 3) Card fills the column, flex layout ensures footer stays at bottom -->
+                                <div class="card w-100" style="display: flex; flex-direction: column;">
+                                    
+                                    <!-- Fixed-height image area -->
+                                    <img src="{{ url_for('static', filename='uploads/' + person.photo_path) }}"
+                                         class="card-img-top"
+                                         alt="{{ person.name }}"
+                                         style="height: 600px; object-fit: cover;">
+                                    
+                                    <div class="card-body" style="flex: 1;">
+                                        <h5 class="card-title">{{ person.name }}</h5>
+                                        <p class="card-text">
+                                            <strong>Age:</strong> {{ person.age }}<br>
+                                            <strong>Last Seen:</strong> {{ person.last_seen_date.strftime('%Y-%m-%d') }}<br>
+                                            <strong>Location:</strong> {{ person.last_seen_location }}
+                                        </p>
+                                        <!-- Use mt-auto to push the button to the bottom if desired -->
+                                        <a href="{{ url_for('view_missing', id=person.id) }}" class="btn btn-info mt-auto">
+                                            View Details
+                                        </a>
+                                    </div>
+                                    
+                                    <div class="card-footer text-muted">
+                                        Reported on {{ person.date_reported.strftime('%Y-%m-%d') }}
+                                    </div>
+                                </div><!-- end card -->
+                                
+                            </div><!-- end col -->
+                            {% endfor %}
+                            
+                        </div><!-- end row -->
+                    {% endif %}
+                    
+
+                    {% elif section == 'view_missing' %}
+                    <div class="row">
+                        <div class="col-md-4">
+                            <img src="{{ url_for('static', filename='uploads/' + person.photo_path) }}"
+                                alt="{{ person.name }}" class="img-fluid rounded">
+                        </div>
+                        <div class="col-md-8">
+                            <h2>{{ person.name }}</h2>
+                            <table class="table">
+                                <tr>
+                                    <th>Age:</th>
+                                    <td>{{ person.age }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Gender:</th>
+                                    <td>{{ person.gender }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Last Seen Date:</th>
+                                    <td>{{ person.last_seen_date.strftime('%Y-%m-%d') }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Last Seen Location:</th>
+                                    <td>{{ person.last_seen_location }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Description:</th>
+                                    <td>{{ person.description }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Date Reported:</th>
+                                    <td>{{ person.date_reported.strftime('%Y-%m-%d') }}</td>
+                                </tr>
+                            </table>
+                            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+    <script>
+        // Connect to Socket.IO server
+        const socket = io();
+
+        // Global variables
+        let referenceImageProcessed = false;
+        let uploadedVideos = [];
+
+        // DOM elements
+        const referenceForm = document.getElementById('reference-form');
+        const referenceImageInput = document.getElementById('reference-image-input');
+        const referenceImagePreview = document.getElementById('reference-image');
+        const referencePlaceholder = document.getElementById('reference-placeholder');
+        const referenceSuccess = document.getElementById('reference-success');
+        const referenceError = document.getElementById('reference-error');
+
+        const videosForm = document.getElementById('videos-form');
+        const videosInput = document.getElementById('videos-input');
+        const videosSuccess = document.getElementById('videos-success');
+        const videosError = document.getElementById('videos-error');
+        const uploadedVideosList = document.getElementById('uploaded-videos-list');
+
+        const startProcessingBtn = document.getElementById('start-processing-btn');
+        const processingSuccess = document.getElementById('processing-success');
+        const processingError = document.getElementById('processing-error');
+
+        const videoStreamsContainer = document.getElementById('video-streams-container');
+
+        // Handle reference image preview
+        referenceImageInput.addEventListener('change', function () {
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    referenceImagePreview.src = e.target.result;
+                    referenceImagePreview.classList.remove('d-none');
+                    referencePlaceholder.classList.add('d-none');
+                };
+
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+
+        // Handle reference image upload
+        referenceForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            if (!referenceImageInput.files || !referenceImageInput.files[0]) {
+                showError(referenceError, 'Please select a reference image.');
+                return;
+            }
+
+            const referenceName = document.getElementById('reference-name-input').value;
+            if (!referenceName.trim()) {
+                showError(referenceError, 'Please enter a name/ID for the reference person.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('reference_image', referenceImageInput.files[0]);
+            formData.append('reference_name', referenceName);
+
+            fetch('/upload_reference', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        referenceImageProcessed = true;
+                        // Store the reference name globally
+                        window.referenceName = referenceName;
+                        showSuccess(referenceSuccess, data.message);
+                        checkStartProcessingButton();
+                    } else {
+                        showError(referenceError, data.error);
+                    }
+                })
+                .catch(error => {
+                    showError(referenceError, 'An error occurred while uploading the reference image.');
+                    console.error('Error:', error);
+                });
+        });
+
+        // Handle videos upload
+        videosForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            if (!videosInput.files || !videosInput.files.length === 0) {
+                showError(videosError, 'Please select a video file.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('videos', videosInput.files[0]);
+
+            fetch('/upload_videos', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        uploadedVideos = data.videos;
+                        showSuccess(videosSuccess, 'Video uploaded successfully!');
+                        displayUploadedVideos();
+                        checkStartProcessingButton();
+                    } else {
+                        showError(videosError, data.error);
+                    }
+                })
+                .catch(error => {
+                    showError(videosError, 'An error occurred while uploading the video.');
+                    console.error('Error:', error);
+                });
+        });
+
+        // Handle start processing
+        startProcessingBtn.addEventListener('click', function () {
+            if (!referenceImageProcessed || uploadedVideos.length === 0) {
+                showError(processingError, 'Please process a reference image and upload at least one video first.');
+                return;
+            }
+
+            const videoIds = uploadedVideos.map(video => video.id);
+
+            fetch('/start_processing', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ video_ids: videoIds })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccess(processingSuccess, data.message);
+                        createVideoStreamContainers();
+                    } else {
+                        showError(processingError, data.error);
+                    }
+                })
+                .catch(error => {
+                    showError(processingError, 'An error occurred while starting processing.');
+                    console.error('Error:', error);
+                });
+        });
+
+        // Socket.IO event handlers
+        socket.on('frame_update', function (data) {
+            const videoStreamContainer = document.getElementById(`video-container-${data.video_id}`);
+
+            if (videoStreamContainer) {
+                const videoStream = videoStreamContainer.querySelector('.video-stream');
+                const detectionOverlay = videoStreamContainer.querySelector('.detection-overlay');
+                const statusBadge = videoStreamContainer.querySelector('.status-badge');
+
+                // Update the video frame
+                videoStream.src = `data:image/jpeg;base64,${data.frame}`;
+
+                // Update detection status
+                if (data.detected) {
+                    detectionOverlay.classList.add('detected');
+                    // Show person's name along with DETECTED status
+                    statusBadge.textContent = window.referenceName + ' DETECTED';
+                    statusBadge.classList.remove('bg-secondary', 'bg-danger');
+                    statusBadge.classList.add('bg-success');
+                } else {
+                    detectionOverlay.classList.remove('detected');
+                    statusBadge.textContent = 'Processing';
+                    statusBadge.classList.remove('bg-success', 'bg-danger');
+                    statusBadge.classList.add('bg-secondary');
+                }
+            }
+        });
+
+        socket.on('video_completed', function (data) {
+            const videoStreamContainer = document.getElementById(`video-container-${data.video_id}`);
+
+            if (videoStreamContainer) {
+                const statusBadge = videoStreamContainer.querySelector('.status-badge');
+                statusBadge.textContent = 'Completed';
+                statusBadge.classList.remove('bg-secondary', 'bg-success');
+                statusBadge.classList.add('bg-info');
+            }
+        });
+
+        socket.on('video_error', function (data) {
+            const videoStreamContainer = document.getElementById(`video-container-${data.video_id}`);
+
+            if (videoStreamContainer) {
+                const statusBadge = videoStreamContainer.querySelector('.status-badge');
+                statusBadge.textContent = 'Error';
+                statusBadge.classList.remove('bg-secondary', 'bg-success');
+                statusBadge.classList.add('bg-danger');
+            }
+        });
+
+        // Helper functions
+        function showSuccess(element, message) {
+            element.textContent = message;
+            element.classList.remove('d-none');
+
+            // Hide after 5 seconds
+            setTimeout(() => {
+                element.classList.add('d-none');
+            }, 5000);
+        }
+
+        function showError(element, message) {
+            element.textContent = message;
+            element.classList.remove('d-none');
+
+            // Hide after 5 seconds
+            setTimeout(() => {
+                element.classList.add('d-none');
+            }, 5000);
+        }
+
+        function displayUploadedVideos() {
+            uploadedVideosList.innerHTML = '';
+
+            if (uploadedVideos.length > 0) {
+                const list = document.createElement('ul');
+                list.className = 'list-group';
+
+                uploadedVideos.forEach(video => {
+                    const item = document.createElement('li');
+                    item.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    item.textContent = video.filename;
+
+                    const badge = document.createElement('span');
+                    badge.className = 'badge bg-primary rounded-pill';
+                    badge.textContent = 'Ready';
+
+                    item.appendChild(badge);
+                    list.appendChild(item);
+                });
+
+                uploadedVideosList.appendChild(list);
+            }
+        }
+
+        function checkStartProcessingButton() {
+            startProcessingBtn.disabled = !(referenceImageProcessed && uploadedVideos.length > 0);
+        }
+
+        function createVideoStreamContainers() {
+            videoStreamsContainer.innerHTML = '';
+
+            uploadedVideos.forEach(video => {
+                const colDiv = document.createElement('div');
+                colDiv.className = 'col-md-6 mb-4';
+
+                const videoContainer = document.createElement('div');
+                videoContainer.className = 'video-container';
+                videoContainer.id = `video-container-${video.id}`;
+
+                const img = document.createElement('img');
+                img.className = 'video-stream';
+                img.alt = 'Video stream';
+
+                const overlay = document.createElement('div');
+                overlay.className = 'detection-overlay';
+
+                const statusBadge = document.createElement('div');
+                statusBadge.className = 'status-badge bg-secondary';
+                statusBadge.textContent = 'Processing';
+
+                const videoTitle = document.createElement('div');
+                videoTitle.className = 'video-title';
+                videoTitle.textContent = video.filename;
+
+                videoContainer.appendChild(img);
+                videoContainer.appendChild(overlay);
+                videoContainer.appendChild(statusBadge);
+                videoContainer.appendChild(videoTitle);
+
+                colDiv.appendChild(videoContainer);
+                videoStreamsContainer.appendChild(colDiv);
+            });
+        }
+    </script>
+
+    <script>
+        // Sidebar toggle for mobile view
+        document.getElementById('sidebarCollapse').addEventListener('click', function () {
+            document.getElementById('sidebar').classList.toggle('active');
+        });
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Toggle for showing more frames
+            const showMoreButtons = document.querySelectorAll('.show-more-frames');
+            showMoreButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    const personId = this.getAttribute('data-person-id');
+                    const frames = document.querySelectorAll(`.hidden-frame[data-person-id="${personId}"]`);
+                    frames.forEach(frame => {
+                        frame.classList.remove('d-none');
+                    });
+                    this.style.display = 'none';
+                });
+            });
+        });
+    </script>
+
+</body>
+
+</html>
