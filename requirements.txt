@@ -1,0 +1,9 @@
+flask
+cachetools
+flask_sqlalchemy
+flask_login
+twilio
+face_recognition
+opencv-python
+numpy
+flask_socketio
