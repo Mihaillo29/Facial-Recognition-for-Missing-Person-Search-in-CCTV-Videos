@@ -18,7 +18,7 @@ TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '#')
 TWILIO_FROM_PHONE = os.environ.get('TWILIO_FROM_PHONE', "#")
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'
+app.config['SECRET_KEY'] = '#'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///missing_persons.db'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MATCHES_FOLDER'] = 'static/matches'
